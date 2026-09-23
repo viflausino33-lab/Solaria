@@ -1,0 +1,15 @@
+gradio
+spaces
+torch
+torchvision
+numpy
+pillow
+matplotlib
+huggingface_hub
+safetensors
+peft
+bitsandbytes
+accelerate
+diffusers==0.38.0
+transformers==5.4.0
+rembg[cpu]==2.0.68
