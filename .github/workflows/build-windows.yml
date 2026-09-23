@@ -26,14 +26,8 @@ jobs:
       - name: Instalar PyInstaller
         run: pip install pyinstaller
 
-      - name: Criar EXE
-        run: |
-          pyinstaller ^
-            --onedir ^
-            --name Solaria ^
-            --collect-all gradio ^
-            --collect-all rembg ^
-            app.py
+      -      - name: Criar EXE
+        run: pyinstaller --onedir --name Solaria --collect-all gradio --collect-all rembg app.py
 
       - name: Compactar Solaria
         shell: pwsh
