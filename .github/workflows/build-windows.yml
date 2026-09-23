@@ -8,7 +8,6 @@ jobs:
     runs-on: windows-latest
 
     steps:
-
       - name: Baixar projeto
         uses: actions/checkout@v4
 
@@ -20,21 +19,18 @@ jobs:
       - name: Atualizar pip
         run: python -m pip install --upgrade pip
 
-      - name: Instalar dependências
+      - name: Instalar dependencias
         run: pip install -r requirements.txt
 
       - name: Instalar PyInstaller
         run: pip install pyinstaller
 
-      -      - name: Criar EXE
+      - name: Criar EXE
         run: pyinstaller --onedir --name Solaria --collect-all gradio --collect-all rembg app.py
 
       - name: Compactar Solaria
         shell: pwsh
-        run: |
-          Compress-Archive `
-            -Path dist\Solaria `
-            -DestinationPath Solaria-Windows.zip
+        run: Compress-Archive -Path dist\Solaria -DestinationPath Solaria-Windows.zip
 
       - name: Disponibilizar EXE
         uses: actions/upload-artifact@v4
