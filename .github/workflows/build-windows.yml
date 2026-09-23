@@ -26,7 +26,7 @@ jobs:
         run: pip install pyinstaller
 
       - name: Criar EXE
-  run: pyinstaller --onedir --name Solaria --collect-all gradio --collect-all rembg --collect-all safetensors app.py
+        run: pyinstaller --onedir --name Solaria --collect-all gradio --collect-all rembg --collect-all safetensors app.py
 
       - name: Compactar Solaria
         shell: pwsh
