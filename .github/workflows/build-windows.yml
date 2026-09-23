@@ -1,0 +1,49 @@
+name: Criar Solaria EXE
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+
+      - name: Baixar projeto
+        uses: actions/checkout@v4
+
+      - name: Instalar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Atualizar pip
+        run: python -m pip install --upgrade pip
+
+      - name: Instalar dependências
+        run: pip install -r requirements.txt
+
+      - name: Instalar PyInstaller
+        run: pip install pyinstaller
+
+      - name: Criar EXE
+        run: |
+          pyinstaller ^
+            --onedir ^
+            --name Solaria ^
+            --collect-all gradio ^
+            --collect-all rembg ^
+            app.py
+
+      - name: Compactar Solaria
+        shell: pwsh
+        run: |
+          Compress-Archive `
+            -Path dist\Solaria `
+            -DestinationPath Solaria-Windows.zip
+
+      - name: Disponibilizar EXE
+        uses: actions/upload-artifact@v4
+        with:
+          name: Solaria-Windows
+          path: Solaria-Windows.zip
