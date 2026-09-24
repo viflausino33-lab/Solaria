@@ -12,6 +12,11 @@ from marigoldv2_inference import (
     MarigoldV2,
 )
 
+from depth.depth_engine import (
+    preparar_depth,
+    normalizar_depth,
+)
+
 from segmentation import (
     gerar_mascara,
 )
