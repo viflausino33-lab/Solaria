@@ -2,6 +2,7 @@ import gradio as gr
 import spaces
 import torch
 import tempfile
+import numpy as np
 
 from PIL import Image
 
@@ -64,7 +65,7 @@ def carregar_modelo():
 
 
 # =====================================================
-# SEGMENTAÇÃO
+# ETAPA 1 — SEGMENTAÇÃO
 # =====================================================
 
 def preparar_mascara(imagem):
@@ -86,6 +87,21 @@ def preparar_mascara(imagem):
         mascara = gerar_mascara(
             imagem
         )
+
+        # -------------------------------------------------
+        # GARANTE QUE A MÁSCARA SEJA PIL
+        # -------------------------------------------------
+
+        if not isinstance(
+            mascara,
+            Image.Image
+        ):
+
+            mascara = Image.fromarray(
+                np.asarray(mascara)
+            )
+
+        mascara = mascara.convert("L")
 
         print(
             "Segmentação concluída.",
@@ -119,17 +135,47 @@ def criar_imagem_do_objeto(
     mascara
 ):
 
+    # -------------------------------------------------
+    # GARANTE QUE A IMAGEM É PIL
+    # -------------------------------------------------
+
+    if not isinstance(
+        imagem,
+        Image.Image
+    ):
+
+        imagem = Image.fromarray(
+            np.asarray(imagem)
+        )
+
     imagem = imagem.convert("RGB")
+
+    # -------------------------------------------------
+    # GARANTE QUE A MÁSCARA É PIL
+    # -------------------------------------------------
+
+    if not isinstance(
+        mascara,
+        Image.Image
+    ):
+
+        mascara = Image.fromarray(
+            np.asarray(mascara)
+        )
+
     mascara = mascara.convert("L")
 
-    # Garante mesmo tamanho
+    # -------------------------------------------------
+    # MESMO TAMANHO
+    # -------------------------------------------------
+
     mascara = mascara.resize(
         imagem.size,
         Image.Resampling.LANCZOS
     )
 
     # -------------------------------------------------
-    # ENCONTRA A ÁREA DO OBJETO
+    # LOCALIZA O OBJETO
     # -------------------------------------------------
 
     bbox = mascara.getbbox()
@@ -142,13 +188,22 @@ def criar_imagem_do_objeto(
         )
 
     # -------------------------------------------------
-    # ADICIONA UMA PEQUENA MARGEM
+    # TAMANHO DA IMAGEM
     # -------------------------------------------------
 
     largura, altura = imagem.size
 
-    margem_x = int(largura * 0.03)
-    margem_y = int(altura * 0.03)
+    # -------------------------------------------------
+    # MARGEM AO REDOR DO OBJETO
+    # -------------------------------------------------
+
+    margem_x = int(
+        largura * 0.03
+    )
+
+    margem_y = int(
+        altura * 0.03
+    )
 
     x1 = max(
         0,
@@ -175,15 +230,25 @@ def criar_imagem_do_objeto(
     # -------------------------------------------------
 
     imagem_cortada = imagem.crop(
-        (x1, y1, x2, y2)
+        (
+            x1,
+            y1,
+            x2,
+            y2
+        )
     )
 
     mascara_cortada = mascara.crop(
-        (x1, y1, x2, y2)
+        (
+            x1,
+            y1,
+            x2,
+            y2
+        )
     )
 
     # -------------------------------------------------
-    # CRIA IMAGEM COM FUNDO PRETO
+    # FUNDO PRETO
     # -------------------------------------------------
 
     fundo = Image.new(
@@ -191,6 +256,10 @@ def criar_imagem_do_objeto(
         imagem_cortada.size,
         (0, 0, 0)
     )
+
+    # -------------------------------------------------
+    # MANTÉM SOMENTE O OBJETO
+    # -------------------------------------------------
 
     objeto = Image.composite(
         imagem_cortada,
@@ -205,7 +274,7 @@ def criar_imagem_do_objeto(
 
 
 # =====================================================
-# ETAPA 2 — 3D
+# ETAPA 2 — MARIGOLD + POINT CLOUD
 # =====================================================
 
 @spaces.GPU(duration=180)
@@ -235,7 +304,7 @@ def gerar_3d(
     try:
 
         # =================================================
-        # 1. RECORTAR OBJETO
+        # 1 — PREPARAR OBJETO
         # =================================================
 
         print(
@@ -256,7 +325,7 @@ def gerar_3d(
         )
 
         # =================================================
-        # 2. CARREGAR MARIGOLD
+        # 2 — CARREGAR MODELO
         # =================================================
 
         print(
@@ -267,7 +336,7 @@ def gerar_3d(
         modelo = carregar_modelo()
 
         # =================================================
-        # 3. PROFUNDIDADE
+        # 3 — PROFUNDIDADE
         # =================================================
 
         print(
@@ -285,7 +354,7 @@ def gerar_3d(
         )
 
         # =================================================
-        # 4. DEPTH VISUAL
+        # 4 — DEPTH VISUAL
         # =================================================
 
         depth_image = resultados.get(
@@ -293,7 +362,7 @@ def gerar_3d(
         )
 
         # =================================================
-        # 5. RAW DEPTH
+        # 5 — RAW DEPTH
         # =================================================
 
         raw_depth = resultados.get(
@@ -318,8 +387,15 @@ def gerar_3d(
             flush=True
         )
 
+        print(
+            "DEBUG mascara:",
+            type(mascara_objeto),
+            mascara_objeto.size,
+            flush=True
+        )
+
         # =================================================
-        # 6. NUVEM DE PONTOS
+        # 6 — NUVEM DE PONTOS
         # =================================================
 
         print(
@@ -346,14 +422,12 @@ def gerar_3d(
         )
 
         # =================================================
-        # 7. SALVAR PLY
+        # 7 — SALVAR PLY
         # =================================================
 
-        arquivo_ply = (
-            tempfile.NamedTemporaryFile(
-                suffix=".ply",
-                delete=False
-            )
+        arquivo_ply = tempfile.NamedTemporaryFile(
+            suffix=".ply",
+            delete=False
         )
 
         arquivo_ply.close()
@@ -370,7 +444,7 @@ def gerar_3d(
         )
 
         # =================================================
-        # 8. STATUS
+        # 8 — STATUS
         # =================================================
 
         status = (
@@ -445,7 +519,8 @@ with gr.Blocks(
         with gr.Column():
 
             mascara_output = gr.Image(
-                label="Máscara do objeto"
+                label="Máscara do objeto",
+                type="pil"
             )
 
     # =================================================
