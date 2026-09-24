@@ -2,6 +2,10 @@ import numpy as np
 from PIL import Image
 
 
+# =====================================================
+# DEPTH → NUVEM DE PONTOS
+# =====================================================
+
 def depth_to_pointcloud(
     depth,
     image=None,
@@ -9,25 +13,62 @@ def depth_to_pointcloud(
     stride=4
 ):
     """
-    Converte mapa de profundidade em nuvem de pontos 3D.
+    Converte um mapa de profundidade em uma
+    nuvem de pontos 3D.
+
+    depth:
+        Matriz 2D de profundidade.
+
+    image:
+        Imagem RGB utilizada para colorir os pontos.
+
+    mask:
+        Máscara do objeto.
+        Branco = objeto.
+        Preto = fundo.
+
+    stride:
+        Quantidade de pixels pulados.
+        stride=1 utiliza todos os pixels.
+        stride=4 utiliza 1 a cada 4 pixels.
     """
 
-    # Depth precisa ser uma matriz 2D
+    # =================================================
+    # 1 — PREPARAR DEPTH
+    # =================================================
+
     depth = np.asarray(
         depth,
         dtype=np.float32
     )
 
-    depth = np.squeeze(depth)
+    depth = np.squeeze(
+        depth
+    )
 
     if depth.ndim != 2:
+
         raise ValueError(
-            f"Formato de depth inesperado: {depth.shape}"
+            "Depth precisa ser 2D. "
+            f"Formato recebido: {depth.shape}"
         )
 
     height, width = depth.shape
 
-    # Grid de pixels
+    # =================================================
+    # 2 — VALIDAR STRIDE
+    # =================================================
+
+    stride = int(stride)
+
+    if stride < 1:
+
+        stride = 1
+
+    # =================================================
+    # 3 — GRID DE PIXELS
+    # =================================================
+
     y, x = np.mgrid[
         0:height:stride,
         0:width:stride
@@ -38,50 +79,81 @@ def depth_to_pointcloud(
         ::stride
     ]
 
-    # Pontos válidos
-    valid = np.isfinite(z)
+    # =================================================
+    # 4 — PONTOS VÁLIDOS
+    # =================================================
 
-    # ==========================================
-    # MÁSCARA DO OBJETO
-    # ==========================================
+    valid = np.isfinite(
+        z
+    )
+
+    # =================================================
+    # 5 — APLICAR MÁSCARA
+    # =================================================
 
     if mask is not None:
 
-        if isinstance(mask, Image.Image):
+        # ---------------------------------------------
+        # CONVERTE PARA PIL
+        # ---------------------------------------------
+
+        if isinstance(
+            mask,
+            Image.Image
+        ):
 
             mask_image = mask
 
         else:
 
-            mask_array = np.asarray(mask)
-
-            # Se vier RGB/RGBA, converte corretamente
-            if mask_array.ndim == 3:
-
-                mask_array = mask_array[:, :, 0]
-
-            mask_image = Image.fromarray(
-                mask_array.astype(np.uint8)
+            mask_array = np.asarray(
+                mask
             )
 
-        # Sempre transforma em escala de cinza
-        mask_image = mask_image.convert("L")
+            # -----------------------------------------
+            # RGB / RGBA → GRAYSCALE
+            # -----------------------------------------
 
-        # Mesmo tamanho da profundidade
+            if mask_array.ndim == 3:
+
+                mask_array = (
+                    mask_array[:, :, 0]
+                )
+
+            mask_image = Image.fromarray(
+                mask_array.astype(
+                    np.uint8
+                )
+            )
+
+        # ---------------------------------------------
+        # ESCALA DE CINZA
+        # ---------------------------------------------
+
+        mask_image = mask_image.convert(
+            "L"
+        )
+
+        # ---------------------------------------------
+        # MESMO TAMANHO DO DEPTH
+        # ---------------------------------------------
+
         mask_image = mask_image.resize(
-            (width, height),
+            (
+                width,
+                height
+            ),
             Image.Resampling.LANCZOS
         )
 
         mask_array = np.asarray(
-            mask_image
+            mask_image,
+            dtype=np.uint8
         )
 
-        print(
-            "DEBUG máscara:",
-            mask_array.shape,
-            flush=True
-        )
+        # ---------------------------------------------
+        # REDUZ PARA O MESMO STRIDE
+        # ---------------------------------------------
 
         object_mask = (
             mask_array[
@@ -90,58 +162,79 @@ def depth_to_pointcloud(
             ] > 128
         )
 
-        print(
-            "DEBUG object_mask:",
-            object_mask.shape,
-            flush=True
-        )
+        # ---------------------------------------------
+        # GARANTE MESMO FORMATO
+        # ---------------------------------------------
 
-        print(
-            "DEBUG valid:",
-            valid.shape,
-            flush=True
-        )
+        if object_mask.shape != valid.shape:
+
+            raise ValueError(
+                "Máscara e depth possuem "
+                "dimensões incompatíveis: "
+                f"mask={object_mask.shape}, "
+                f"depth={valid.shape}"
+            )
+
+        # ---------------------------------------------
+        # APLICA
+        # ---------------------------------------------
 
         valid = (
             valid
             & object_mask
         )
 
-    # ==========================================
-    # VERIFICA PONTOS
-    # ==========================================
+    # =================================================
+    # 6 — VERIFICAR RESULTADO
+    # =================================================
 
-    if not np.any(valid):
+    if not np.any(
+        valid
+    ):
 
         raise ValueError(
             "Nenhum ponto 3D válido foi encontrado. "
-            "A máscara pode ter removido todo o objeto."
+            "Verifique a máscara do objeto."
         )
 
-    # ==========================================
-    # FILTRA PONTOS
-    # ==========================================
+    # =================================================
+    # 7 — FILTRAR XYZ
+    # =================================================
 
-    x = x[valid].astype(
+    x = x[
+        valid
+    ].astype(
         np.float32
     )
 
-    y = y[valid].astype(
+    y = y[
+        valid
+    ].astype(
         np.float32
     )
 
-    z = z[valid].astype(
+    z = z[
+        valid
+    ].astype(
         np.float32
     )
 
-    # ==========================================
-    # NORMALIZA PROFUNDIDADE
-    # ==========================================
+    # =================================================
+    # 8 — NORMALIZAR PROFUNDIDADE
+    # =================================================
 
-    z_min = np.min(z)
-    z_max = np.max(z)
+    z_min = np.min(
+        z
+    )
 
-    if z_max - z_min > 1e-8:
+    z_max = np.max(
+        z
+    )
+
+    if (
+        z_max - z_min
+        > 1e-8
+    ):
 
         z = (
             z - z_min
@@ -153,27 +246,31 @@ def depth_to_pointcloud(
 
         z[:] = 0.5
 
-    # ==========================================
-    # CENTRALIZA X/Y
-    # ==========================================
+    # =================================================
+    # 9 — CENTRALIZAR X
+    # =================================================
 
     x = (
-        x - width / 2
+        x - width / 2.0
     ) / width
 
+    # =================================================
+    # 10 — CENTRALIZAR Y
+    # =================================================
+
     y = -(
-        y - height / 2
+        y - height / 2.0
     ) / height
 
-    # ==========================================
-    # ESCALA Z
-    # ==========================================
+    # =================================================
+    # 11 — ESCALA Z
+    # =================================================
 
     z = z * 2.0
 
-    # ==========================================
-    # XYZ
-    # ==========================================
+    # =================================================
+    # 12 — MONTAR XYZ
+    # =================================================
 
     points = np.stack(
         [
@@ -184,37 +281,103 @@ def depth_to_pointcloud(
         axis=1
     )
 
-    # ==========================================
-    # CORES
-    # ==========================================
+    # =================================================
+    # 13 — CORES
+    # =================================================
 
     colors = None
 
     if image is not None:
 
-        image = image.convert("RGB")
+        # ---------------------------------------------
+        # GARANTE PIL
+        # ---------------------------------------------
+
+        if not isinstance(
+            image,
+            Image.Image
+        ):
+
+            image = Image.fromarray(
+                np.asarray(image)
+            )
+
+        image = image.convert(
+            "RGB"
+        )
+
+        # ---------------------------------------------
+        # MESMO TAMANHO
+        # ---------------------------------------------
 
         image = image.resize(
-            (width, height)
+            (
+                width,
+                height
+            ),
+            Image.Resampling.LANCZOS
         )
 
         image_array = np.asarray(
-            image
+            image,
+            dtype=np.uint8
         )
 
-        sampled_colors = (
-            image_array[
-                ::stride,
-                ::stride
-            ]
-        )
+        # ---------------------------------------------
+        # MESMO STRIDE
+        # ---------------------------------------------
+
+        sampled_colors = image_array[
+            ::stride,
+            ::stride
+        ]
+
+        # ---------------------------------------------
+        # APLICA MESMA MÁSCARA
+        # ---------------------------------------------
 
         colors = sampled_colors[
             valid
         ]
 
-    return points, colors
+        colors = np.asarray(
+            colors,
+            dtype=np.uint8
+        )
 
+    # =================================================
+    # DEBUG
+    # =================================================
+
+    print(
+        "PointCloud:",
+        f"{len(points)} pontos",
+        f"| depth={depth.shape}",
+        f"| stride={stride}",
+        flush=True
+    )
+
+    if colors is not None:
+
+        print(
+            "PointCloud:",
+            f"{len(colors)} cores",
+            flush=True
+        )
+
+    # =================================================
+    # RETORNO
+    # =================================================
+
+    return (
+        points,
+        colors
+    )
+
+
+# =====================================================
+# SALVAR PLY
+# =====================================================
 
 def save_pointcloud_ply(
     filename,
@@ -230,6 +393,10 @@ def save_pointcloud_ply(
         dtype=np.float32
     )
 
+    # =================================================
+    # VALIDAR PONTOS
+    # =================================================
+
     if (
         points.ndim != 2
         or points.shape[1] != 3
@@ -239,9 +406,16 @@ def save_pointcloud_ply(
             "points precisa ter formato (N, 3)."
         )
 
+    # =================================================
+    # VALIDAR CORES
+    # =================================================
+
     if colors is not None:
 
-        colors = np.asarray(colors)
+        colors = np.asarray(
+            colors,
+            dtype=np.uint8
+        )
 
         if len(colors) != len(points):
 
@@ -250,22 +424,52 @@ def save_pointcloud_ply(
                 "ser igual à quantidade de pontos."
             )
 
+        if (
+            colors.ndim != 2
+            or colors.shape[1] != 3
+        ):
+
+            raise ValueError(
+                "colors precisa ter formato (N, 3)."
+            )
+
+    # =================================================
+    # CRIAR ARQUIVO
+    # =================================================
+
     with open(
         filename,
         "w",
         encoding="utf-8"
     ) as file:
 
-        file.write("ply\n")
-        file.write("format ascii 1.0\n")
+        # ---------------------------------------------
+        # HEADER
+        # ---------------------------------------------
+
+        file.write(
+            "ply\n"
+        )
+
+        file.write(
+            "format ascii 1.0\n"
+        )
 
         file.write(
             f"element vertex {len(points)}\n"
         )
 
-        file.write("property float x\n")
-        file.write("property float y\n")
-        file.write("property float z\n")
+        file.write(
+            "property float x\n"
+        )
+
+        file.write(
+            "property float y\n"
+        )
+
+        file.write(
+            "property float z\n"
+        )
 
         if colors is not None:
 
@@ -281,7 +485,13 @@ def save_pointcloud_ply(
                 "property uchar blue\n"
             )
 
-        file.write("end_header\n")
+        file.write(
+            "end_header\n"
+        )
+
+        # ---------------------------------------------
+        # PONTOS + CORES
+        # ---------------------------------------------
 
         if colors is not None:
 
@@ -302,6 +512,10 @@ def save_pointcloud_ply(
                     f"{int(g)} "
                     f"{int(b)}\n"
                 )
+
+        # ---------------------------------------------
+        # SOMENTE PONTOS
+        # ---------------------------------------------
 
         else:
 
