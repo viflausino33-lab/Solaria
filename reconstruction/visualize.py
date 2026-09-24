@@ -1,5 +1,5 @@
 import numpy as np
-import matplotlib.pyplot as plt
+import plotly.graph_objects as go
 
 from reconstruction_engine import preparar_pointcloud
 from geometry import preparar_geometria
@@ -7,27 +7,23 @@ from surface_completion import completar_superficie
 
 
 def visualizar_reconstrucao(points):
-    """
-    Mostra a reconstrução 3D da nuvem
-    de pontos.
-    """
 
     points = np.asarray(
         points,
         dtype=np.float32
     )
 
-    # ---------------------------------------------
+    # ==========================================
     # PREPARAÇÃO
-    # ---------------------------------------------
+    # ==========================================
 
     points, colors = preparar_pointcloud(
         points
     )
 
-    # ---------------------------------------------
+    # ==========================================
     # GEOMETRIA
-    # ---------------------------------------------
+    # ==========================================
 
     geometria = preparar_geometria(
         points
@@ -35,9 +31,9 @@ def visualizar_reconstrucao(points):
 
     frente = geometria["points"]
 
-    # ---------------------------------------------
+    # ==========================================
     # COMPLETAR SUPERFÍCIE
-    # ---------------------------------------------
+    # ==========================================
 
     resultado = completar_superficie(
         frente
@@ -46,55 +42,91 @@ def visualizar_reconstrucao(points):
     frente = resultado["frente"]
     verso = resultado["verso"]
 
-    # ---------------------------------------------
-    # VISUALIZAÇÃO
-    # ---------------------------------------------
-
-    figura = plt.figure(
-        figsize=(10, 8)
+    print(
+        f"Frente: {len(frente)} pontos"
     )
 
-    eixo = figura.add_subplot(
-        111,
-        projection="3d"
+    print(
+        f"Verso: {len(verso)} pontos"
     )
+
+    # ==========================================
+    # GRÁFICO 3D
+    # ==========================================
+
+    figura = go.Figure()
 
     # Frente
-    eixo.scatter(
-        frente[:, 0],
-        frente[:, 1],
-        frente[:, 2],
-        s=1,
-        label="Frente"
+    figura.add_trace(
+        go.Scatter3d(
+            x=frente[:, 0],
+            y=frente[:, 1],
+            z=frente[:, 2],
+            mode="markers",
+            marker=dict(
+                size=2
+            ),
+            name="Frente"
+        )
     )
 
     # Verso
-    eixo.scatter(
-        verso[:, 0],
-        verso[:, 1],
-        verso[:, 2],
-        s=1,
-        label="Verso"
+    figura.add_trace(
+        go.Scatter3d(
+            x=verso[:, 0],
+            y=verso[:, 1],
+            z=verso[:, 2],
+            mode="markers",
+            marker=dict(
+                size=2
+            ),
+            name="Verso"
+        )
     )
 
-    eixo.set_xlabel("X")
-    eixo.set_ylabel("Y")
-    eixo.set_zlabel("Z")
-
-    eixo.set_title(
-        "Reconstrução 3D - Solaria"
+    figura.update_layout(
+        title="Solaria - Reconstrução 3D",
+        scene=dict(
+            xaxis_title="X",
+            yaxis_title="Y",
+            zaxis_title="Z",
+            aspectmode="data"
+        ),
+        width=1000,
+        height=800
     )
 
-    eixo.legend()
+    # ==========================================
+    # SALVAR HTML
+    # ==========================================
 
-    plt.tight_layout()
+    arquivo = "reconstrucao_3d.html"
 
-    plt.show()
+    figura.write_html(
+        arquivo
+    )
+
+    print()
+    print(
+        "================================"
+    )
+
+    print(
+        "VISUALIZAÇÃO 3D CRIADA"
+    )
+
+    print(
+        "================================"
+    )
+
+    print(
+        f"Arquivo: {arquivo}"
+    )
 
 
-# =====================================================
+# ==============================================
 # TESTE
-# =====================================================
+# ==============================================
 
 if __name__ == "__main__":
 
