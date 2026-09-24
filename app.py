@@ -371,15 +371,33 @@ def gerar_3d(
         # =================================================
 
         raw_depth = resultados.get(
-            "raw_depth"
-        )
+    "raw_depth"
+)
 
-        if raw_depth is None:
+if raw_depth is None:
 
-            raise ValueError(
-                "O Marigold não retornou "
-                "'raw_depth'."
-            )
+    raise ValueError(
+        "O Marigold não retornou "
+        "'raw_depth'."
+    )
+
+# ---------------------------------------------
+# PREPARAR DEPTH
+# ---------------------------------------------
+
+    raw_depth = preparar_depth(
+         raw_depth
+)
+
+    raw_depth = normalizar_depth(
+        raw_depth
+)
+
+print(
+    "Depth preparado:",
+    raw_depth.shape,
+    flush=True
+)
 
         print(
             "DEBUG raw_depth:",
@@ -473,13 +491,13 @@ def gerar_3d(
 
     except Exception as e:
 
-        print(
+print(
             "ERRO NA GERAÇÃO 3D:",
             repr(e),
             flush=True
         )
 
-        return (
+return (
             None,
             None,
             None,
