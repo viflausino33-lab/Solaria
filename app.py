@@ -22,11 +22,15 @@ from pointcloud import (
 
 
 # =====================================================
-# CONFIGURAÇÃO DO MODELO
+# CONFIGURAÇÃO
 # =====================================================
 
 model = None
 
+
+# =====================================================
+# CARREGAR MARIGOLD V2
+# =====================================================
 
 def carregar_modelo():
 
@@ -60,7 +64,7 @@ def carregar_modelo():
 
 
 # =====================================================
-# ETAPA 1 — SEGMENTAÇÃO
+# SEGMENTAÇÃO
 # =====================================================
 
 def preparar_mascara(imagem):
@@ -107,7 +111,101 @@ def preparar_mascara(imagem):
 
 
 # =====================================================
-# ETAPA 2 — MARIGOLD + POINT CLOUD
+# RECORTAR OBJETO
+# =====================================================
+
+def criar_imagem_do_objeto(
+    imagem,
+    mascara
+):
+
+    imagem = imagem.convert("RGB")
+    mascara = mascara.convert("L")
+
+    # Garante mesmo tamanho
+    mascara = mascara.resize(
+        imagem.size,
+        Image.Resampling.LANCZOS
+    )
+
+    # -------------------------------------------------
+    # ENCONTRA A ÁREA DO OBJETO
+    # -------------------------------------------------
+
+    bbox = mascara.getbbox()
+
+    if bbox is None:
+
+        raise ValueError(
+            "Não foi possível encontrar "
+            "o objeto na máscara."
+        )
+
+    # -------------------------------------------------
+    # ADICIONA UMA PEQUENA MARGEM
+    # -------------------------------------------------
+
+    largura, altura = imagem.size
+
+    margem_x = int(largura * 0.03)
+    margem_y = int(altura * 0.03)
+
+    x1 = max(
+        0,
+        bbox[0] - margem_x
+    )
+
+    y1 = max(
+        0,
+        bbox[1] - margem_y
+    )
+
+    x2 = min(
+        largura,
+        bbox[2] + margem_x
+    )
+
+    y2 = min(
+        altura,
+        bbox[3] + margem_y
+    )
+
+    # -------------------------------------------------
+    # RECORTA
+    # -------------------------------------------------
+
+    imagem_cortada = imagem.crop(
+        (x1, y1, x2, y2)
+    )
+
+    mascara_cortada = mascara.crop(
+        (x1, y1, x2, y2)
+    )
+
+    # -------------------------------------------------
+    # CRIA IMAGEM COM FUNDO PRETO
+    # -------------------------------------------------
+
+    fundo = Image.new(
+        "RGB",
+        imagem_cortada.size,
+        (0, 0, 0)
+    )
+
+    objeto = Image.composite(
+        imagem_cortada,
+        fundo,
+        mascara_cortada
+    )
+
+    return (
+        objeto,
+        mascara_cortada
+    )
+
+
+# =====================================================
+# ETAPA 2 — 3D
 # =====================================================
 
 @spaces.GPU(duration=180)
@@ -121,6 +219,7 @@ def gerar_3d(
         return (
             None,
             None,
+            None,
             "Envie uma imagem."
         )
 
@@ -129,14 +228,36 @@ def gerar_3d(
         return (
             None,
             None,
+            None,
             "A máscara do objeto não foi gerada."
         )
 
     try:
 
-        # ---------------------------------------------
-        # MARIGOLD
-        # ---------------------------------------------
+        # =================================================
+        # 1. RECORTAR OBJETO
+        # =================================================
+
+        print(
+            "Preparando objeto...",
+            flush=True
+        )
+
+        objeto, mascara_objeto = (
+            criar_imagem_do_objeto(
+                imagem,
+                mascara
+            )
+        )
+
+        print(
+            f"Objeto preparado: {objeto.size}",
+            flush=True
+        )
+
+        # =================================================
+        # 2. CARREGAR MARIGOLD
+        # =================================================
 
         print(
             "Carregando Marigold V2...",
@@ -145,17 +266,17 @@ def gerar_3d(
 
         modelo = carregar_modelo()
 
-        # ---------------------------------------------
-        # PROFUNDIDADE
-        # ---------------------------------------------
+        # =================================================
+        # 3. PROFUNDIDADE
+        # =================================================
 
         print(
-            "Calculando profundidade...",
+            "Calculando profundidade do objeto...",
             flush=True
         )
 
         resultados = modelo(
-            imagem
+            objeto
         )
 
         print(
@@ -163,17 +284,17 @@ def gerar_3d(
             flush=True
         )
 
-        # ---------------------------------------------
-        # DEPTH VISUAL
-        # ---------------------------------------------
+        # =================================================
+        # 4. DEPTH VISUAL
+        # =================================================
 
         depth_image = resultados.get(
             "Depth"
         )
 
-        # ---------------------------------------------
-        # RAW DEPTH
-        # ---------------------------------------------
+        # =================================================
+        # 5. RAW DEPTH
+        # =================================================
 
         raw_depth = resultados.get(
             "raw_depth"
@@ -197,20 +318,9 @@ def gerar_3d(
             flush=True
         )
 
-        print(
-            "DEBUG mascara:",
-            type(mascara),
-            getattr(
-                mascara,
-                "size",
-                None
-            ),
-            flush=True
-        )
-
-        # ---------------------------------------------
-        # POINT CLOUD
-        # ---------------------------------------------
+        # =================================================
+        # 6. NUVEM DE PONTOS
+        # =================================================
 
         print(
             "Gerando nuvem de pontos...",
@@ -222,9 +332,9 @@ def gerar_3d(
 
                 raw_depth,
 
-                imagem,
+                objeto,
 
-                mask=mascara,
+                mask=mascara_objeto,
 
                 stride=4
             )
@@ -235,25 +345,22 @@ def gerar_3d(
             flush=True
         )
 
-        # ---------------------------------------------
-        # SALVA PLY
-        # ---------------------------------------------
+        # =================================================
+        # 7. SALVAR PLY
+        # =================================================
 
-        arquivo_ply = tempfile.NamedTemporaryFile(
-
-            suffix=".ply",
-
-            delete=False
+        arquivo_ply = (
+            tempfile.NamedTemporaryFile(
+                suffix=".ply",
+                delete=False
+            )
         )
 
         arquivo_ply.close()
 
         save_pointcloud_ply(
-
             arquivo_ply.name,
-
             points,
-
             colors
         )
 
@@ -262,18 +369,24 @@ def gerar_3d(
             flush=True
         )
 
-        # ---------------------------------------------
-        # STATUS
-        # ---------------------------------------------
+        # =================================================
+        # 8. STATUS
+        # =================================================
 
         status = (
             "Processamento concluído!\n\n"
-            f"Pontos 3D: {len(points):,}\n"
-            "Apenas a região do objeto "
-            "foi utilizada na nuvem."
+            f"Tamanho do objeto: {objeto.size}\n"
+            f"Pontos 3D: {len(points):,}\n\n"
+            "Fluxo utilizado:\n"
+            "✓ Segmentação\n"
+            "✓ Recorte do objeto\n"
+            "✓ Marigold V2\n"
+            "✓ Máscara aplicada\n"
+            "✓ Nuvem de pontos"
         )
 
         return (
+            mascara_objeto,
             depth_image,
             arquivo_ply.name,
             status
@@ -288,6 +401,7 @@ def gerar_3d(
         )
 
         return (
+            None,
             None,
             None,
             f"Erro durante a geração 3D:\n\n{str(e)}"
@@ -306,18 +420,18 @@ with gr.Blocks(
         """
         # 🚀 Solaria 1.0
 
-        ## Imagem 2D → Profundidade → 3D
+        ## Imagem 2D → Objeto → Profundidade → 3D
 
         O Solaria identifica o objeto principal,
-        calcula a profundidade com Marigold V2
-        e cria uma nuvem de pontos somente
-        utilizando a área do objeto.
+        remove o fundo, calcula a profundidade
+        com Marigold V2 e cria uma nuvem de pontos
+        somente do objeto.
         """
     )
 
-    # -------------------------------------------------
-    # ENTRADA
-    # -------------------------------------------------
+    # =================================================
+    # IMAGEM + MÁSCARA
+    # =================================================
 
     with gr.Row():
 
@@ -334,26 +448,26 @@ with gr.Blocks(
                 label="Máscara do objeto"
             )
 
-    # -------------------------------------------------
+    # =================================================
     # BOTÃO
-    # -------------------------------------------------
+    # =================================================
 
     botao = gr.Button(
         "Gerar 3D",
         variant="primary"
     )
 
-    # -------------------------------------------------
+    # =================================================
     # PROFUNDIDADE
-    # -------------------------------------------------
+    # =================================================
 
     depth_output = gr.Image(
         label="Mapa de profundidade"
     )
 
-    # -------------------------------------------------
+    # =================================================
     # VISUALIZAÇÃO 3D
-    # -------------------------------------------------
+    # =================================================
 
     gr.Markdown(
         """
@@ -366,18 +480,18 @@ with gr.Blocks(
         display_mode="point_cloud"
     )
 
-    # -------------------------------------------------
+    # =================================================
     # STATUS
-    # -------------------------------------------------
+    # =================================================
 
     resultado = gr.Textbox(
         label="Status",
-        lines=6
+        lines=8
     )
 
-    # -------------------------------------------------
+    # =================================================
     # FLUXO
-    # -------------------------------------------------
+    # =================================================
 
     etapa_mascara = botao.click(
         fn=preparar_mascara,
@@ -395,6 +509,7 @@ with gr.Blocks(
             mascara_output
         ],
         outputs=[
+            mascara_output,
             depth_output,
             modelo_3d,
             resultado
